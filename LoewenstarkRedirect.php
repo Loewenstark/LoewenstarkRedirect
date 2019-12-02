@@ -68,8 +68,8 @@ class LoewenstarkRedirect extends Plugin
         $this->tryRedirectUrlByLastSlug($request, $url);
         $this->tryRedirectUrlByOldUrl($request, $url);
         $this->tryRedirectMagentoUrl($request, $url);
-        //$this->getCategoryUrlByOldUrl($request, $url);
-        //$this->getProductUrlByOldUrl($request, $url);
+        $this->getCategoryUrlByOldUrl($request, $url);
+        $this->getProductUrlByOldUrl($request, $url);
     }
 
     /*
@@ -192,7 +192,7 @@ class LoewenstarkRedirect extends Plugin
 
         $query->select(['*'])
             ->from('s_articles_attributes')
-            ->where("magento_product_url LIKE :url")
+            ->where("magento_url LIKE :url")
             ->setParameter(':url', '%' . $url);
 
         $data = $query->execute()->fetchAll(\PDO::FETCH_ASSOC);
@@ -277,6 +277,9 @@ class LoewenstarkRedirect extends Plugin
 
     public function update(UpdateContext $updateContext)
     {
+        if (version_compare($updateContext->getCurrentVersion(), '1.0.2', '<=')) {
+            $this->createAttributes();
+        }
         if (version_compare($updateContext->getCurrentVersion(), '1.0.1', '<=')) {
             $this->createOldUrlTable();
         }
@@ -288,6 +291,23 @@ class LoewenstarkRedirect extends Plugin
     public function install(InstallContext $context)
     {
         $this->createOldUrlTable();
+        $this->createAttributes();
+    }
+
+    public function createAttributes()
+    {
+        $crudService = $this->container->get('shopware_attribute.crud_service');
+        //$snippets = $this->container->get('snippets');
+
+        $crudService->update('s_articles_attributes', 'magento_url', 'string', [
+            'displayInBackend' => true,
+            'label' => "Magento Url",
+        ]);
+
+        $crudService->update('s_categories_attributes', 'magento_url', 'string', [
+            'displayInBackend' => true,
+            'label' => "Magento Url",
+        ]);
     }
 
     public function createOldUrlTable()
