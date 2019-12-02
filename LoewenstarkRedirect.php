@@ -64,19 +64,28 @@ class LoewenstarkRedirect extends Plugin
 
     public function _handleNoRoute($request)
     {
+        $shop = false;
+        if ($this->container->initialized('shop')) {
+            $shop = $this->container->get('shop');
+        }
+        if (!$shop) {
+            $shop = $this->container->get('models')->getRepository(\Shopware\Models\Shop\Shop::class)->getActiveDefault();
+        }
+        $shopId = $shop->getId();
+
         $url = $request->getRequestUri();
-        $this->tryRedirectUrlByLastSlug($request, $url);
-        $this->tryRedirectUrlByOldUrl($request, $url);
-        $this->tryRedirectMagentoUrl($request, $url);
-        $this->getCategoryUrlByOldUrl($request, $url);
-        $this->getProductUrlByOldUrl($request, $url);
+        $this->tryRedirectUrlByLastSlug($request, $url, $shopId);
+        $this->tryRedirectUrlByOldUrl($request, $url, $shopId);
+        $this->tryRedirectMagentoUrl($request, $url, $shopId);
+        $this->getCategoryUrlByOldUrl($request, $url, $shopId);
+        $this->getProductUrlByOldUrl($request, $url, $shopId);
     }
 
     /*
         Try to redirect magento urls without seo url e.g.:
         .../catalog/product/view/id/4544/s/votronic-2200-12v-70a-batterietrennrelais/category/40/
     */
-    public function tryRedirectMagentoUrl($request, $url)
+    public function tryRedirectMagentoUrl($request, $url, $shopId)
     {
         $db = $this->container->get('dbal_connection');
         $query = $db->createQueryBuilder();
@@ -110,7 +119,7 @@ class LoewenstarkRedirect extends Plugin
                 continue;
             }
 
-            $url = $this->getProductUrlById($articleId);
+            $url = $this->getProductUrlById($articleId, $shopId);
             if ($url) {
                 header('Location: ' . $url);
                 exit;
@@ -119,7 +128,7 @@ class LoewenstarkRedirect extends Plugin
         return false;
     }
 
-    public function tryRedirectUrlByOldUrl($request, $url)
+    public function tryRedirectUrlByOldUrl($request, $url, $shopId)
     {
         $db = $this->container->get('dbal_connection');
         $query = $db->createQueryBuilder();
@@ -146,7 +155,7 @@ class LoewenstarkRedirect extends Plugin
                 continue;
             }
 
-            $url = $this->getProductUrlById($articleId);
+            $url = $this->getProductUrlById($articleId, $shopId);
             if ($url) {
                 header('Location: ' . $url);
                 exit;
@@ -155,7 +164,7 @@ class LoewenstarkRedirect extends Plugin
         return false;
     }
 
-    public function getCategoryUrlByOldUrl($request, $url)
+    public function getCategoryUrlByOldUrl($request, $url, $shopId)
     {
         $db = $this->container->get('dbal_connection');
         $query = $db->createQueryBuilder();
@@ -172,8 +181,9 @@ class LoewenstarkRedirect extends Plugin
 
             $query->select(['*'])
                 ->from('s_core_rewrite_urls')
-                ->where("org_path = :url")
-                ->setParameter(':url', 'sViewport=cat&sCategory=' . $row['categoryID']);
+                ->where("org_path = :url AND subshopID=:shopId")
+                ->setParameter(':url', 'sViewport=cat&sCategory=' . $row['categoryID'])
+                ->setParameter(':shopId', $shopId);
     
             $dataa = $query->execute()->fetchAll(\PDO::FETCH_ASSOC);
 
@@ -185,7 +195,7 @@ class LoewenstarkRedirect extends Plugin
         return false;
     }
 
-    public function getProductUrlByOldUrl($request, $url)
+    public function getProductUrlByOldUrl($request, $url, $shopId)
     {
         $db = $this->container->get('dbal_connection');
         $query = $db->createQueryBuilder();
@@ -198,7 +208,7 @@ class LoewenstarkRedirect extends Plugin
         $data = $query->execute()->fetchAll(\PDO::FETCH_ASSOC);
 
         foreach ($data as $row) {
-            $url = $this->getProductUrlById($row['articleID']);
+            $url = $this->getProductUrlById($row['articleID'], $shopId);
 
             if ($url) {
                 header('Location: ' . $url);
@@ -227,13 +237,13 @@ class LoewenstarkRedirect extends Plugin
         return false;
     }
 
-    public function getProductUrlById($id, array $options = [])
+    public function getProductUrlById($id, $shopId)
     {
         $result = array();
 
         //Context
         $modelManager = $this->container->get('models');
-        $shop = $modelManager->getRepository(\Shopware\Models\Shop\Shop::class)->getById(1);
+        $shop = $modelManager->getRepository(\Shopware\Models\Shop\Shop::class)->getById($shopId);
         $shopContext = Context::createFromShop($shop, Shopware()->Container()->get('config'));
 
         //get seo url
@@ -253,7 +263,7 @@ class LoewenstarkRedirect extends Plugin
         https://www.offgridtec.com/batterien/lithium-ionen/mastervolt-mls-12-130-12v-10ah-128wh-lifepo4-akku.html
         to https://www.offgridtec.com/mastervolt-mls-12-130-12v-10ah-128wh-lifepo4-akku.html
     */
-    public function tryRedirectUrlByLastSlug($request, $url)
+    public function tryRedirectUrlByLastSlug($request, $url, $shopId)
     {
         $db = $this->container->get('dbal_connection');
         $query = $db->createQueryBuilder();
@@ -262,17 +272,78 @@ class LoewenstarkRedirect extends Plugin
 
         $query->select(['*'])
             ->from('s_core_rewrite_urls')
-            ->where("path LIKE :url")
-            ->setParameter(':url', $last_slug);
+            ->where("path LIKE :url AND subshopID=:shopId")
+            ->setParameter(':url', $last_slug)
+            ->setParameter(':shopId', $shopId);
 
         $dataa = $query->execute()->fetchAll(\PDO::FETCH_ASSOC);
 
-        foreach ($dataa as $rowa) {
-            header('Location: /' . $rowa['path']);
-            exit;
+        foreach ($dataa as $rowa)
+        {
+            $urls = $this->prepareUrl($shopId, array($rowa['path']));
+
+            foreach($urls as $url)
+            {
+                header('Location: ' . $url);
+                exit;
+            }
         }
 
         return false;
+    }
+
+    /**
+     * @deprecated since version 5.5, to be removed in 5.7 - The cache warmer doesn't rely on SEO URLs anymore, so its
+     * highly recommended to use the UrlProviders' getUrls() of HttpCache instead.
+     *
+     * Helper to add the host and the basepath as a prefix to the url
+     *
+     * @param int      $shopId
+     * @param string[] $urls
+     *
+     * @return string[]
+     */
+    private function prepareUrl($shopId, $urls)
+    {
+        $shop = $this->getShopDataById($shopId);
+
+        //if not already the main shop get it
+        $mainShop = !empty($shop['main_id']) ? $this->getShopDataById($shop['main_id']) : $shop;
+        $httpHost = $mainShop['secure'] ? 'https://' : 'http://';
+        if ($shop['base_url']) {
+            $baseUrl = $shop['base_url'];
+        } else {
+            // If no virtual url of the language shop is give us the one from the main shop. Otherwise use simply the base_path
+            $baseUrl = $mainShop['base_url'] ?: $mainShop['base_path'];
+        }
+        // Use the main host if no language host ist available
+        $shopHost = empty($shop['host']) ? $mainShop['host'] : $shop['host'];
+
+        foreach ($urls as &$url) {
+            $url = $httpHost . $shopHost . $baseUrl . '/' . strtolower($url);
+        }
+
+        return $urls;
+    }
+
+    /**
+     * @deprecated since version 5.5, to be removed in 5.7 - Only used by `prepareUrl` which is deprecated
+     *
+     * Returns the shop object by id
+     *
+     * @param int $shopId
+     *
+     * @return array
+     */
+    private function getShopDataById($shopId)
+    {
+        $db = $this->container->get('dbal_connection');
+        $shopData = $db->fetchAssoc(
+            'SELECT * FROM s_core_shops WHERE active = 1 AND id = :id',
+            ['id' => (int) $shopId]
+        );
+
+        return $shopData;
     }
 
     public function update(UpdateContext $updateContext)
