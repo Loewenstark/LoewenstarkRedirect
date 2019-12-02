@@ -1,0 +1,2 @@
+# LoewenstarkRedirect
+Shopware redirect module
