@@ -9,7 +9,7 @@ Mage::app()->setCurrentStore(Mage_Core_Model_App::ADMIN_STORE_ID);
 //Mage::app()->setCurrentStore(12);
 
 
-class Product_Export
+class Category_Export
 {
     public $_media_gallery_backend_model;
     public $rows = array();
@@ -20,6 +20,35 @@ class Product_Export
     {
         //set store id
         $this->store_id = $store_id;
+
+	//add header row
+        $this->rows[] = array(
+            'categoryId',
+            'parentID',
+            'description',
+            'position',
+            'metatitle',
+            'metakeywords',
+            'metadescription',
+            'cmsheadline',
+            'cmstext',
+            'template',
+            'active',
+            'blog',
+            'external',
+            'hidefilter',
+            'attribute_attribute1',
+            'attribute_attribute2',
+            'attribute_attribute3',
+            'attribute_attribute4',
+            'attribute_attribute5',
+            'attribute_attribute6',
+            'CustomerGroup',
+            'magento_url',
+            'name',
+            'level',
+            'path',
+        );
 
         //prepare categories
         $this->prepareCategories();
@@ -136,5 +165,5 @@ class Product_Export
     }
 }
 
-$x = new Product_Export();
+$x = new Category_Export();
 $x->run(1);
