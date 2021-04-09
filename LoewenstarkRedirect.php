@@ -157,6 +157,7 @@ class LoewenstarkRedirect extends Plugin
 
             $url = $this->getProductUrlById($articleId, $shopId);
             if ($url) {
+                header("HTTP/1.1 301 Moved Permanently");
                 header('Location: ' . $url);
                 exit;
             }
@@ -188,6 +189,7 @@ class LoewenstarkRedirect extends Plugin
             $dataa = $query->execute()->fetchAll(\PDO::FETCH_ASSOC);
 
             foreach ($dataa as $rowa) {
+                header("HTTP/1.1 301 Moved Permanently");
                 header('Location: /' . $rowa['path']);
                 exit;
             }
